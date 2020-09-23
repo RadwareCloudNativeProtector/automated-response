@@ -1,0 +1,120 @@
+{
+   "accountIds":[
+      "870047315808"
+   ],
+   "accountVendor":"AWS",
+   "objectType":"Alert",
+   "objectPortalURL":"https://portal.cwp.radwarecloud.com/#/data-center/alert-details/300189817612",
+   "id":"300189817612",
+   "title":"Port Scanning",
+   "score":"7",
+   "createdDate":"2019-07-20T16:28:03",
+   "updatedDate":"2019-07-20T16:33:29",
+   "vendor":"Radware",
+   "apiVersion":"1.00",
+   "status":"NEW",
+   "involvedResource":[
+      {
+         "accountId":"870047315808",
+         "accountVendor":"AWS",
+         "name":"attack-sim-1",
+         "id":"i-0c104e938df1f5dc4",
+         "vpcId":"vpc-05346d1c9dc9bbe82",
+         "vpcName":"VPC-SETRAINING-US",
+         "tags":"[{Key: Name,Value: attack-sim-1}, {Key: Type,Value: slave}]",
+         "creationDate":"2019-11-07T07:00:05",
+         "passed":false,
+         "region":"us-east-1",
+         "instanceType":"t2.micro",
+         "ipAddresses":[
+            null,
+            "10.0.0.139"
+         ],
+         "ami":"ami-09eb220f17c4ea73d",
+         "status":"stopped"
+      },
+      {
+         "accountId":"870047315808",
+         "accountVendor":"AWS",
+         "name":"jenkins-1.se.us",
+         "id":"i-0538651176a83514e",
+         "vpcId":"vpc-05346d1c9dc9bbe82",
+         "vpcName":"VPC-SETRAINING-US",
+         "tags":"[{Key: Name,Value: jenkins-1.se.us}, {Key: Type,Value: master}]",
+         "creationDate":"2019-06-17T15:17:47",
+         "passed":false,
+         "region":"us-east-1",
+         "instanceType":"t2.micro",
+         "ipAddresses":[
+            "18.214.37.89",
+            "10.0.0.240"
+         ],
+         "ami":"ami-05722dde7728ad43f",
+         "status":"running",
+         "publicIp":"18.214.37.89"
+      }
+   ],
+   "activities":[
+      {
+         "name":"shareAndRemoveEC2SnapshotPublic",
+         "activityId":"300189846167",
+         "title":"Share and unshare of storage volume snapshots by role radware-cwp-attack-test-role",
+         "detectionTime":"2019-07-20T16:33:29",
+         "attackStage":"DATA EXFILTRATION",
+         "source":"CloudTrail",
+         "invocationSource":"34.239.1.48",
+         "identity":"arn:aws:iam::870047315808:role/radware-cwp-attack-test-role",
+         "affectedResources":{
+            "targetComputer":"i-0f1a54ada9b4f46c0",
+            "snapshotId":"snap-0f01db565d9f87aff"
+         }
+      },
+      {
+         "name":"awsApiFailures",
+         "activityId":"300189846165",
+         "title":"Multiple AWS API Failures by user NjVjMmVjZmQw",
+         "detectionTime":"2019-07-20T16:28:03",
+         "attackStage":"RECONNAISSANCE",
+         "source":"CloudTrail",
+         "invocationSource":"34.234.225.176",
+         "identity":"arn:aws:iam::870047315808:user/NjVjMmVjZmQw",
+         "affectedResources":{
+
+         }
+      },
+      {
+         "name":"instanceCreation",
+         "activityId":"300189846163",
+         "title":"Instance Creation by user NjVjMmVjZmQw",
+         "detectionTime":"2019-07-20T16:26:49",
+         "attackStage":"PRIVILEGE ESCALATION",
+         "source":"CloudTrail",
+         "invocationSource":"34.234.225.176",
+         "identity":"arn:aws:iam::870047315808:user/NjVjMmVjZmQw",
+         "affectedResources":{
+            "targetComputer":"i-0f1a54ada9b4f46c0"
+         }
+      },
+      {
+         "name":"portScanning",
+         "activityId":"300189846162",
+         "title":"Port Scanning",
+         "detectionTime":"2019-07-20T16:24:42",
+         "attackStage":"SCANNING",
+         "source":"VPC Flow logs",
+         "invocationSource":"10.0.0.32",
+         "identity":"i-0f1a54ada9b4f46c0",
+         "affectedResources":{
+            "targetIp":"10.0.0.240",
+            "sourceIp":"10.0.0.32",
+            "targetComputer":"i-0538651176a83514e"
+         }
+      }
+   ],
+   "attackSteps":{
+      "PRIVILEGE ESCALATION":1,
+      "RECONNAISSANCE":1,
+      "DATA EXFILTRATION":1,
+      "SCANNING":1
+   }
+}
