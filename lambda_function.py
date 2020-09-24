@@ -1,30 +1,4 @@
 '''
-For Alert: This example includes the extraction of Radware's CWP json Alert from SNS,
-    extraction of relevant AWS resources that could have been compromised
-    and the responses available in order to stop any malicious operations by those resources.
-    For compromised users we can respond by blocking his console login (delete login profile),
-    by blocking his cli key (deactivate access key) or 'suspend' his activity by
-    setting deny permission boundary to make all methods unavailable for the user.
-    For compromised roles and instances we can respond by disassociating the role
-    from instance (to prevent future attempts to use the machine for malicious actions
-    with the permissions of the role) and revoke the role with deny permission to
-    interrupt any ongoing assuming of the role, or quarantine the instance by attaching it
-    a security group which will prevent any inbound and outbound traffic and reboot
-    the instance to interrupt any current connection to it, or simply stop the instance.
-    For compromised databases we can respond by preventing all access to the database
-    by attaching it a security group which will prevent any inbound and outbound traffic
-    and reboot the database to interrupt any current connection to it.
-    For cloudtrail logs, if a trail was stopped, we can re-start it.
-    For S3 buckets, if a bucket was made publicly accessed, we can block it.
-
-For Hardening: This example includes the extraction of Radware's CWP json Hardening Warning (Misconfiguration, Exposed Machines, Exposed Database) from SNS,
-    extraction of relevant AWS resources that failed to pass misconfiguration rules or that are exposed
-    and the responses available in order to avoid option of attackers to take advantage of these vulnerabilities.
-    For users with console login and no MFA configured we can respond by blocking his console login (delete login profile).
-    For users with unused credentials we can respond by blocking his cli key (deactivate access key).
-    For exposed machines and databases we can remove the inbound rule that is the reason for the exposure.
-
-
 Required IAM Policy permissions:
 {
     "Version": "2012-10-17",
@@ -126,7 +100,7 @@ def process_message(source_message):
                     )
                     # From the response that contains the assumed role, get the temporary credentials that can be used to make subsequent API calls
                     all_session_credentials[failed_resource_account_id] = assumed_role_object['Credentials']
-                    credentials_for_event = all_session_credentials[failed_resource_account_id]
+                    credentials_for_crosss_account = all_session_credentials[failed_resource_account_id]
 
                 except ClientError as e:
                     error = e.response['Error']['Code']
@@ -139,9 +113,9 @@ def process_message(source_message):
 
                 boto_session = boto3.Session(
                     region_name=failed_resource['region'],
-                    aws_access_key_id=credentials_for_event['AccessKeyId'],
-                    aws_secret_access_key=credentials_for_event['SecretAccessKey'],
-                    aws_session_token=credentials_for_event['SessionToken']
+                    aws_access_key_id=credentials_for_crosss_account['AccessKeyId'],
+                    aws_secret_access_key=credentials_for_crosss_account['SecretAccessKey'],
+                    aws_session_token=credentials_for_crosss_account['SessionToken']
                 )
 
                 trigger_response(boto_session, source_message)
@@ -152,7 +126,11 @@ def process_message(source_message):
                 print(
                     f'This finding was found in account id {failed_resource_account_id}. The Lambda function is running in account id: {lambda_account_id}. Remediations need to be ran from the account there is the issue in.')
         else:
-            trigger_response(boto3, source_message)
+            boto_session = boto3.Session(
+                region_name=failed_resource['region']
+            )
+
+            trigger_response(boto_session, source_message)
 
 
 def trigger_response(boto_session, source_message):
@@ -164,11 +142,4 @@ def trigger_response(boto_session, source_message):
         hardening = source_message
         print("hardening=" + str(hardening))
         responses.handle_hardening(boto_session, hardening)
-
-
-
-
-
-
-
 
