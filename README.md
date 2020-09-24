@@ -2,7 +2,7 @@
 
 This open source AWS tool consumes the published security findings detected in Radware CWP to then trigger a response in the AWS account of the resource. This project covers several example use cases, such as: quarantine a user involved in an attack, quarantine a compromised machine, disable AWS console access for users without Multi-Factor Authentication, deactivate unused user access keys and many more.
 
-The CFT deployment process will create an SNS Topic, an IAM Role, CloudWatch Log Group (default 700 days retention), and a Lambda Function. Messages published to the created SNS Topic trigger the Lambda Function on-demand.
+The CFT deployment process will create an SNS Topic, an IAM Role, CloudWatch Log Group (default 731 days retention), and a Lambda Function. Messages published to the created SNS Topic trigger the Lambda Function on-demand.
 
 ## Setup
 
@@ -34,6 +34,26 @@ This CFT stack has 2 parameters:
 1. Under **Capabilities and transforms**, click to check the **3** pending acknowledgements: "_I acknowledge..._". (or use "--capabilities CAPABILITY_IAM" if using the AWS CLI.)
 1. Click **Create stack**.
 1. After the process finished view the **Outputs** tab. The **InputTopicARN** value will be needed for the next step in the Radware CWP console.
+
+## Deploy for Multi-account mode
+
+For multi-account mode you will setup one account using the deployment CFT above as the central account for CWP automated responses.
+For each additional account that the central account will manage you will set up a cross-account access role and policy.
+
+On the AWS CFT console, for your account, perform these steps:
+
+1.  Set the ACCOUNT\_MODE environment variable to *multi*.
+2.  Edit the *trust\_policy.json* file (in the
+    *cross\_account\_role\_scripts* folder),to add the account id of the
+    additional account. Then, run the following commands:
+
+<!-- end list -->
+
+    cd cross_account_role_scripts
+    ./create_role.sh <aws profile>
+
+This script will create the IAM role and policy for the additional account.
+
 
 ## Post-Deployment Steps
 

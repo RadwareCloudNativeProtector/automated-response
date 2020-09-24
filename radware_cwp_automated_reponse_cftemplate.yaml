@@ -104,7 +104,7 @@ Resources:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub "/aws/lambda/${CWPResponseFunction}"
-      RetentionInDays: 700
+      RetentionInDays: 731
 Outputs:
   InputTopicARN:
     Description: 'ARN that CWP sends events to'
