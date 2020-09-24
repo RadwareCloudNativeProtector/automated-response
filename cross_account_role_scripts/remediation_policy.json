@@ -31,8 +31,7 @@
                 "s3:PutBucketPublicAccessBlock",
                 "logs:CreateLogGroup",
                 "logs:CreateLogStream",
-                "logs:PutLogEvents",
-                "sts:AssumeRole"
+                "logs:PutLogEvents"
             ],
             "Resource": "*"
         }
