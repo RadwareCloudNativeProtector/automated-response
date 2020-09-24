@@ -12,7 +12,7 @@ import lambda_function
 message = r'''
     {
         "accountIds": [
-            "334049999223"
+            "547540466142"
         ],
         "accountName": "Radware Test",
         "cloudPlatform": null,
@@ -34,10 +34,10 @@ message = r'''
         "subject": "Publicly exposed ports on 1 machine - detected in account Radware SSA (ID: 334049999223)",
         "failedResources": [
             {
-                "accountId": "334049999223",
+                "accountId": "547540466142",
                 "accountVendor": "AWS",
                 "name": "Detection1-DO_NOT_DELETE",
-                "id": "i-0ccb783443e80e944",
+                "id": "i-0939ebc7c8834bd5b",
                 "vpcId": "vpc-0da800c9e3d3b69fb",
                 "tags": [
                     {
@@ -62,12 +62,12 @@ message = r'''
                 "region": "us-east-1",
                 "instanceType": "t3a.medium",
                 "ipAddresses": [
-                    "66.22.109.2",
+                    "66.22.109.7",
                     "172.16.254.119"
                 ],
                 "ami": "ami-07ebfd5b3428b6f4d",
                 "status": "stopped",
-                "publicIp": "66.22.109.2"
+                "publicIp": "66.22.109.7"
             }
         ]
     }

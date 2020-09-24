@@ -1,0 +1,40 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "RadwarCWPAutomatedResponse",
+            "Effect": "Allow",
+            "Action": [
+                "iam:UpdateAccessKey",
+                "iam:DeleteLoginProfile",
+                "iam:ListAccessKeys",
+                "iam:PutUserPermissionsBoundary",
+                "iam:DeleteUserPermissionsBoundary",
+                "iam:PutRolePolicy",
+                "iam:GetPolicy",
+                "iam:CreatePolicy",
+                "iam:GetUser",
+                "ec2:DisassociateIamInstanceProfile",
+                "ec2:RebootInstances",
+                "ec2:DescribeIamInstanceProfileAssociations",
+                "ec2:ModifyInstanceAttribute",
+                "ec2:StopInstances",
+                "ec2:CreateSecurityGroup",
+                "ec2:DescribeSecurityGroups",
+                "ec2:RevokeSecurityGroupEgress",
+                "ec2:RevokeSecurityGroupIngress",
+                "rds:ModifyDBInstance",
+                "rds:RebootDBInstance",
+                "rds:DescribeDBInstances",
+                "rds:RevokeDBSecurityGroupIngress",
+                "cloudtrail:StartLogging",
+                "s3:PutBucketPublicAccessBlock",
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents",
+                "sts:AssumeRole"
+            ],
+            "Resource": "*"
+        }
+    ]
+}

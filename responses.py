@@ -1,6 +1,77 @@
 import datetime
 
 
+def handle_alert(boto_session, alert):
+    # handle alert
+    # create aws client for ec2 service
+    ec2_client = boto_session.client('ec2')
+    # create aws client for iam service
+    iam_client = boto_session.client('iam')
+    # create aws client for rds service
+    rds_client = boto_session.client('rds')
+    # create aws client for cloudtrail service
+    cloudtrail_client = boto_session.client('cloudtrail')
+    # create aws client for s3 service
+    s3_client = boto_session.client('s3')
+
+    # involved identities are users and roles which were somehow part of the alert -
+    # extract only users (roles are also in involvedIdentities)
+    users = [involvedIdentity for involvedIdentity in alert['involvedIdentities'] if 'user' in involvedIdentity['id']]
+
+    '''you can delete user login profile to block console login
+        or/and deactivate access key to block cli usage
+        or set permission boundary to make all methods unavailable for the user'''
+    user_names = [user['name'] for user in users]
+    delete_users_login_profile(iam_client, user_names)
+    deactivate_users_access_keys(iam_client, user_names)
+    set_deny_all_permission_boundary(iam_client, users)
+
+    # involved resources are machines which were somehow part of the alert and check that we have the instanceId
+    machines = [involvedResource for involvedResource in alert['involvedResource'] if 'id' in involvedResource]
+
+    '''you can disassociate role from machine
+        or/and quarantine instance by security group
+        or/and simply stop the machine'''
+    disassociate_role_from_machines(ec2_client, iam_client, machines)
+    quarantine_instances_by_security_group(ec2_client, machines)
+    stop_instances(ec2_client, machines)
+
+    # find all rds involved - put in set to avoid duplications
+    rds_dbs = {activity['affectedResources']['rds'] for activity in alert['activities'] if 'rds' in activity['affectedResources']}
+    # quarantine rds by security group (DB security group and VPC security group) and reboot to stop
+    # current open connections
+    quarantine_rds_by_security_group(rds_client, ec2_client, rds_dbs)
+
+    # get tail ARN of the activities with name like "cloudtrailStopLogs", if so - start CloudTrail logging
+    cloudtrial_arns = [activity['affectedResources']['trailName'] for activity in alert['activities'] if activity['name'] == 'cloudtrailStopLogs' and 'trailName' in activity['affectedResources']]
+    start_cloudtrail_logging(cloudtrail_client, cloudtrial_arns)
+
+    # get bucket names of the activities with name like "publicS3Bucket",
+    # if bucket made publicly accessible - block its public access
+    buckets = [activity['affectedResources']['bucketName'] for activity in alert['activities'] if activity['name'] == 'publicS3Bucket' and 'bucketName' in activity['affectedResources']]
+    block_public_access(s3_client, buckets)
+
+
+def handle_hardening(boto_session, hardening):
+    # handle hardening
+
+    # create aws client for iam service
+    iam_client = boto_session.client('iam')
+    # create aws client for ec2 service
+    ec2_client = boto_session.client('ec2')
+    # create aws client for rds service
+    rds_client = boto_session.client('rds')
+
+    if hardening['hardeningType'] == 'Misconfiguration':
+        handle_misconfiguration(iam_client, hardening)
+    elif hardening['hardeningType'] == 'ExposedMachines':
+        handle_exposed_machines(ec2_client, hardening)
+    elif hardening['hardeningType'] == 'ExposedDatabase':
+        handle_exposed_database(ec2_client, rds_client, hardening)
+    elif hardening['hardeningType'] == 'PublicS3Bucket':
+        handle_public_bucket(hardening)
+
+
 def handle_misconfiguration(iam_client, hardening):
     # handle misconfiguration
     # extract misconfiguration rule id
@@ -144,7 +215,8 @@ def quarantine_rds_by_security_group(rds_client, ec2_client, rds_dbs):
     # quarantine rds by associating it to security group which has no inbound/outbound permissions
     for rds in rds_dbs:
         modified = False
-        # modify rds instance security group and vpc security group to security group that has no inbound/outbound permission by db instance  and by security group id
+        # modify rds instance security group and vpc security group to security group that has no inbound/outbound
+        # permission by db instance  and by security group id
         try:
             # describe rds in order to get its vpc
             rds_list = rds_client.describe_db_instances(DBInstanceIdentifier=rds)
@@ -180,7 +252,8 @@ def quarantine_instances_by_security_group(ec2_client, machines):
             instance_id = machine['id']
             vpc_id = machine['vpcId']
             security_group_id = get_empty_security_group(ec2_client, vpc_id)
-            # modify instance security group to security group that has no inbound/outbound permission by instance id and by security group id
+            # modify instance security group to security group that has no inbound/outbound permission by instance id
+            # and by security group id
             ec2_client.modify_instance_attribute(InstanceId=instance_id,Groups=[security_group_id])
             print("modify instance " + str(instance_id) + " security group to " + str(security_group_id))
 
@@ -199,7 +272,8 @@ def quarantine_instances_by_security_group(ec2_client, machines):
 def disassociate_role_from_machines(ec2_client, iam_client, machines):
     # describe instance association profiles and disassociate the from instance
     # inline policy to revoke all role sessions
-    role_revoke_policy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Deny\",\"Action\":[\"*\"],\"Resource\":[\"*\"],\"Condition\":{\"DateLessThan\":{\"aws:TokenIssueTime\":\"%s\"}}}]}"
+    role_revoke_policy = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Deny\",\"Action\":[\"*\"]," \
+                         "\"Resource\":[\"*\"],\"Condition\":{\"DateLessThan\":{\"aws:TokenIssueTime\":\"%s\"}}}]} "
 
     for machine in machines:
         try:
@@ -222,7 +296,8 @@ def disassociate_role_from_machines(ec2_client, iam_client, machines):
                         #  Current Time
                         time = datetime.datetime.utcnow().isoformat()
 
-                        # the attacker might have assumed the role and can use it up to 12 hours unless we revoke the active sessions
+                        # the attacker might have assumed the role and can use it up to 12 hours unless we revoke the
+                        # active sessions
                         iam_client.put_role_policy(RoleName=role_name,PolicyName='AWSRevokeOlderSessions',PolicyDocument=role_revoke_policy % time)
                         print("revoked role: " + str(role_name))
 
@@ -240,7 +315,8 @@ def get_deny_all_policy(iam_client, account_id):
     # get deny all policy if exists or create it if it doesn't
     deny_policy_name = 'CwpDenyAllPolicy'
     deny_policy_arn = 'arn:aws:iam::' + account_id + ':policy/' + deny_policy_name
-    deny_policy_permissions = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Deny\",\"Action\":[\"*\"],\"Resource\":[\"*\"]}]}"
+    deny_policy_permissions = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Deny\",\"Action\":[\"*\"]," \
+                              "\"Resource\":[\"*\"]}]} "
 
     try:
         # get policy by policy arn

@@ -25,39 +25,47 @@ For Hardening: This example includes the extraction of Radware's CWP json Harden
     For exposed machines and databases we can remove the inbound rule that is the reason for the exposure.
 
 
-required permissions:
-    "iam:UpdateAccessKey",
-    "iam:DeleteLoginProfile",
-    "iam:ListAccessKeys",
-    "iam:PutUserPermissionsBoundary",
-    "iam:DeleteUserPermissionsBoundary",
-    "iam:PutRolePolicy",
-    "iam:GetPolicy",
-    "iam:CreatePolicy",
-    "iam:GetUser",
-
-    "ec2:DisassociateIamInstanceProfile",
-    "ec2:RebootInstances",
-    "ec2:DescribeIamInstanceProfileAssociations",
-    "ec2:ModifyInstanceAttribute",
-    "ec2:StopInstances",
-    "ec2:CreateSecurityGroup",
-    "ec2:DescribeSecurityGroups",
-    "ec2:RevokeSecurityGroupEgress",
-    "ec2:RevokeSecurityGroupIngress",
-
-    "rds:ModifyDBInstance",
-    "rds:RebootDBInstance",
-    "rds:DescribeDBInstances",
-    "rds:RevokeDBSecurityGroupIngress",
-
-    "cloudtrail:StartLogging",
-
-    "s3:PutBucketPublicAccessBlock",
-
-    "logs:CreateLogGroup",
-    "logs:CreateLogStream",
-    "logs:PutLogEvents"
+Required IAM Policy permissions:
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "RadwarCWPAutomatedResponse",
+            "Effect": "Allow",
+            "Action": [
+                "iam:UpdateAccessKey",
+                "iam:DeleteLoginProfile",
+                "iam:ListAccessKeys",
+                "iam:PutUserPermissionsBoundary",
+                "iam:DeleteUserPermissionsBoundary",
+                "iam:PutRolePolicy",
+                "iam:GetPolicy",
+                "iam:CreatePolicy",
+                "iam:GetUser",
+                "ec2:DisassociateIamInstanceProfile",
+                "ec2:RebootInstances",
+                "ec2:DescribeIamInstanceProfileAssociations",
+                "ec2:ModifyInstanceAttribute",
+                "ec2:StopInstances",
+                "ec2:CreateSecurityGroup",
+                "ec2:DescribeSecurityGroups",
+                "ec2:RevokeSecurityGroupEgress",
+                "ec2:RevokeSecurityGroupIngress",
+                "rds:ModifyDBInstance",
+                "rds:RebootDBInstance",
+                "rds:DescribeDBInstances",
+                "rds:RevokeDBSecurityGroupIngress",
+                "cloudtrail:StartLogging",
+                "s3:PutBucketPublicAccessBlock",
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents",
+                "sts:AssumeRole"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
 '''
 
 from __future__ import print_function
@@ -65,97 +73,99 @@ from __future__ import print_function
 import json
 import boto3
 import responses
+import os
+from botocore.exceptions import ClientError
 
-print('Loading function')
+account_mode = os.getenv('ACCOUNT_MODE', '')
+cross_account_role_name = os.getenv('CROSS_ACCOUNT_ROLE_NAME', '')
+all_session_credentials = {}
 
 
 def lambda_handler(event, context):
     # get SNS message
-    message = event['Records'][0]['Sns']['Message']
+    raw_message = event['Records'][0]['Sns']['Message']
 
     # notification message from CWP is json of the relevant alert or misconfiguration (hardening)
-    message_object = json.loads(message)
-    print('XXXXXXXX')
-    print(message_object)
-
-    if message_object['objectType'] == 'AlertEntity':
-        alert = message_object
-        print("alert=" + str(alert))
-        handle_alert(alert)
-    elif message_object['objectType'] == 'WarningEntity':
-        hardening = message_object
-        print("hardening=" + str(hardening))
-        handle_hardening(hardening)
+    source_message = json.loads(raw_message)
+    process_message(source_message)
 
 
-def handle_alert(alert):
-    # handle alert
-    # create aws client for ec2 service
-    ec2_client = boto3.client('ec2')
-    # create aws client for iam service
-    iam_client = boto3.client('iam')
-    # create aws client for rds service
-    rds_client = boto3.client('rds')
-    # create aws client for cloudtrail service
-    cloudtrail_client = boto3.client('cloudtrail')
-    # create aws client for s3 service
-    s3_client = boto3.client('s3')
+def process_message(source_message):
+    # Get the session info
+    try:  # get the accountID
+        sts = boto3.client('sts')
+        lambda_account_id = sts.get_caller_identity()['Account']
 
-    # involved identities are users and roles which were somehow part of the alert -
-    # extract only users (roles are also in involvedIdentities)
-    users = [involvedIdentity for involvedIdentity in alert['involvedIdentities'] if 'user' in involvedIdentity['id']]
+    except ClientError as e:
+        print(f'{__file__} Unexpected STS error - {e}')
 
-    '''you can delete user login profile to block console login
-        or/and deactivate access key to block cli usage
-        or set permission boundary to make all methods unavailable for the user'''
-    user_names = [user['name'] for user in users]
-    responses.delete_users_login_profile(iam_client, user_names)
-    responses.deactivate_users_access_keys(iam_client, user_names)
-    responses.set_deny_all_permission_boundary(iam_client, users)
+    print(f'\nLambda Execution Account: {lambda_account_id}')
+    for failed_resource in source_message['failedResources']:
 
-    # involved resources are machines which were somehow part of the alert and check that we have the instanceId
-    machines = [involvedResource for involvedResource in alert['involvedResource'] if 'id' in involvedResource]
+        failed_resource_account_id = failed_resource['accountId']
+        print(f'\nFailed Resource Account: {failed_resource_account_id}')
 
-    '''you can disassociate role from machine
-        or/and quarantine instance by security group
-        or/and simply stop the machine'''
-    responses.disassociate_role_from_machines(ec2_client, iam_client, machines)
-    responses.quarantine_instances_by_security_group(ec2_client, machines)
-    responses.stop_instances(ec2_client, machines)
+        # Account mode will be set in the lambda variables. Default to single mode
+        if lambda_account_id != failed_resource_account_id:  # The remediation needs to be done outside of this account
+            if account_mode == 'multi':  # multi or single account mode?
+                # If it's not the same account, try to assume role to the new one
+                print(
+                    "The AWS account of this Lambda execution role does not match the account of the target failed resource. \nMulti-account mode detected and activated.")
+                role_arn = ''.join(['arn:aws:iam::', failed_resource_account_id, ':role/'])
+                # This allows users to set their own role name if they have a different naming convention
+                role_arn = ''.join([role_arn, cross_account_role_name]) if cross_account_role_name else ''.join([role_arn, 'RadwareCWPAutomatedResponse'])
 
-    # find all rds involved - put in set to avoid duplications
-    rds_dbs = {activity['affectedResources']['rds'] for activity in alert['activities'] if 'rds' in activity['affectedResources']}
-    # quarantine rds by security group (DB security group and VPC security group) and reboot to stop
-    # current open connections
-    responses.quarantine_rds_by_security_group(rds_client, ec2_client, rds_dbs)
+                global all_session_credentials
+                # create an STS client object that represents a live connection to the STS service
+                sts_client = boto3.client('sts')
 
-    # get tail ARN of the activities with name like "cloudtrailStopLogs", if so - start CloudTrail logging
-    cloudtrial_arns = [activity['affectedResources']['trailName'] for activity in alert['activities'] if activity['name'] == 'cloudtrailStopLogs' and 'trailName' in activity['affectedResources']]
-    responses.start_cloudtrail_logging(cloudtrail_client, cloudtrial_arns)
+                # Call the assume_role method of the STSConnection object and pass the role ARN and a role session name.
+                try:
+                    assumed_role_object = sts_client.assume_role(
+                        RoleArn=role_arn,
+                        RoleSessionName='CWPAutomatedResponse'
+                    )
+                    # From the response that contains the assumed role, get the temporary credentials that can be used to make subsequent API calls
+                    all_session_credentials[failed_resource_account_id] = assumed_role_object['Credentials']
+                    credentials_for_event = all_session_credentials[failed_resource_account_id]
 
-    # get bucket names of the activities with name like "publicS3Bucket",
-    # if bucket made publicly accessible - block its public access
-    buckets = [activity['affectedResources']['bucketName'] for activity in alert['activities'] if activity['name'] == 'publicS3Bucket' and 'bucketName' in activity['affectedResources']]
-    responses.block_public_access(s3_client, buckets)
+                except ClientError as e:
+                    error = e.response['Error']['Code']
+                    print(f'{__file__} - Error - {e}')
+                    if error == 'AccessDenied':
+                        print(
+                            'Tried and failed to assume a role in the target account. Please verify that the cross account role is createad.')
+                    else:
+                        print(f'Unexpected Error: {e}')
+
+                boto_session = boto3.Session(
+                    region_name=failed_resource['region'],
+                    aws_access_key_id=credentials_for_event['AccessKeyId'],
+                    aws_secret_access_key=credentials_for_event['SecretAccessKey'],
+                    aws_session_token=credentials_for_event['SessionToken']
+                )
+
+                if source_message['objectType'] == 'AlertEntity':
+                    alert = source_message
+                    # print("alert=" + str(alert))
+                    responses.handle_alert(boto_session, alert)
+                elif source_message['objectType'] == 'WarningEntity':
+                    hardening = source_message
+                    # print("hardening=" + str(hardening))
+                    responses.handle_hardening(boto_session, hardening)
+
+        else:
+            # In single account mode, we don't want to try to execute a Response outside of this account therefore
+            # the lambda will exit with error
+            print(
+                f'This finding was found in account id {failed_resource_account_id}. The Lambda function is running in account id: {lambda_account_id}. Remediations need to be ran from the account there is the issue in.')
 
 
-def handle_hardening(hardening):
-    # handle hardening
-    # create aws client for iam service
-    iam_client = boto3.client('iam')
-    # create aws client for ec2 service
-    ec2_client = boto3.client('ec2')
-    # create aws client for rds service
-    rds_client = boto3.client('rds')
 
-    if hardening['hardeningType'] == 'Misconfiguration':
-        responses.handle_misconfiguration(iam_client, hardening)
-    elif hardening['hardeningType'] == 'ExposedMachines':
-        responses.handle_exposed_machines(ec2_client, hardening)
-    elif hardening['hardeningType'] == 'ExposedDatabase':
-        responses.handle_exposed_database(ec2_client, rds_client, hardening)
-    elif hardening['hardeningType'] == 'PublicS3Bucket':
-        responses.handle_public_bucket(hardening)
+
+
+
+
 
 
 

@@ -1,0 +1,114 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  DeploymentMode:
+    Description: Deployment Mode - can be single-account or multi-account (STS assume-role)
+    Type: String
+    Default: single
+    AllowedValues:
+      - single
+      - multi
+      
+  CrossAccountAccessRole:
+    Description: Cross-account access role name for multi-account response mode. Ignore if using single-account response mode.
+    Type: String
+    Default: RadwareCWPAutomatedResponse
+
+Resources:
+  InputTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: 'RadwareCWP-Findings'
+      TopicName: 'RadwareCWP-Findings'
+
+  InputTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument:
+        Id: D9DeliveryPolicy
+        Version: '2012-10-17'
+        Statement:
+          - Sid: D9DeliveryPolicy
+            Effect: Allow
+            Principal:
+              AWS: 'arn:aws:iam::634729597623:root'
+            Action: sns:Publish
+            Resource: !Ref InputTopic
+      Topics:
+        - !Ref InputTopic
+
+  CWPResponseFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: RadwareCWP-Automated-Response
+      Description: 'Automated reponses to Radware CWP security findings'
+      CodeUri: 
+        Bucket: 
+          Fn::Join:
+          - ''
+          - - 'radware-cwp-devops-'
+            - !Ref 'AWS::Region'
+          # If deploying CFT manually, replace this join with a string (e.g. Bucket: my-custom-bucket-name
+        Key: 'radware_cwp_automated_response/radware_cwp_automated_response.zip'
+        # Key is the name of the zip file which contains lambda_function.py
+      Runtime: python3.8
+      Timeout: 120 # Most will be under 10 seconds
+      Tracing: Active
+      Handler: lambda_function.lambda_handler
+      Policies:
+        - Version: '2012-10-17' # Custom Policy Document
+          Statement:
+            - Effect: Allow
+              Action:
+                - iam:UpdateAccessKey,
+                - iam:DeleteLoginProfile,
+                - iam:ListAccessKeys,
+                - iam:PutUserPermissionsBoundary,
+                - iam:DeleteUserPermissionsBoundary,
+                - iam:PutRolePolicy,
+                - iam:GetPolicy,
+                - iam:CreatePolicy,
+                - iam:GetUser,
+                - ec2:DisassociateIamInstanceProfile,
+                - ec2:RebootInstances,
+                - ec2:DescribeIamInstanceProfileAssociations,
+                - ec2:ModifyInstanceAttribute,
+                - ec2:StopInstances,
+                - ec2:CreateSecurityGroup,
+                - ec2:DescribeSecurityGroups,
+                - ec2:RevokeSecurityGroupEgress,
+                - ec2:RevokeSecurityGroupIngress,
+                - rds:ModifyDBInstance,
+                - rds:RebootDBInstance,
+                - rds:DescribeDBInstances,
+                - rds:RevokeDBSecurityGroupIngress,
+                - cloudtrail:StartLogging,
+                - s3:PutBucketPublicAccessBlock,
+                - logs:CreateLogGroup,
+                - logs:CreateLogStream,
+                - logs:PutLogEvents
+                - sts:AssumeRole # For multi_account mode
+              Resource: '*'
+      Environment:
+        Variables:
+          ACCOUNT_MODE: !Ref DeploymentMode
+          CROSS_ACCOUNT_ROLE_NAME: !Ref CrossAccountAccessRole
+      Events:
+        cwpFindings:
+          Type: SNS
+          Properties:
+            Topic: !Ref InputTopic
+            
+  LambdaLogsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${CWPResponseFunction}"
+      RetentionInDays: 700
+Outputs:
+  InputTopicARN:
+    Description: 'ARN that CWP sends events to'
+    Value: !Ref InputTopic
+
+
+
