@@ -105,12 +105,10 @@ def handle_public_bucket(hardening):
 
 def handle_exposed_machines(ec2_client, hardening):
     # handle exposed machines
-    """
-    # if SSh(port 22), RDP(port 3389) or all ports are open, remove the exposed port from security group inbound ip permissions
+    # if SSh(port 22), RDP(port 3389) or all ports are open, remove the exposed port from
+    # security group inbound ip permissions
     if '22' in hardening['openPorts'] or '3389' in hardening['openPorts'] or '0-65535' in hardening['openPorts']:
         remove_exposed_port_from_inbound(ec2_client, hardening['securityGroup'], [22, 3389])
-    """
-    stop_instances(ec2_client, hardening['failedResources'])
 
 
 def handle_exposed_database(ec2_client, rds_client, hardening):

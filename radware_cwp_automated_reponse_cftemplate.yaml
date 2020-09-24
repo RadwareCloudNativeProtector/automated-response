@@ -38,7 +38,7 @@ Resources:
       Topics:
         - !Ref InputTopic
 
-  CWPResponseFunction:
+  Solution:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: RadwareCWP-Automated-Response
@@ -103,7 +103,7 @@ Resources:
   LambdaLogsLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub "/aws/lambda/${CWPResponseFunction}"
+      LogGroupName: !Sub "/aws/lambda/${Solution}"
       RetentionInDays: 731
 Outputs:
   InputTopicARN:

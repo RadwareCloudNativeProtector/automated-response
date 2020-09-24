@@ -109,8 +109,7 @@ def process_message(source_message):
         if lambda_account_id != failed_resource_account_id:  # The remediation needs to be done outside of this account
             if account_mode == 'multi':  # multi or single account mode?
                 # If it's not the same account, try to assume role to the new one
-                print(
-                    "The AWS account of this Lambda execution role does not match the account of the target failed resource. \nMulti-account mode detected and activated.")
+                print("\nThe AWS account of this Lambda execution role does not match the account of the target failed resource. \nMulti-account mode detected and activated.")
                 role_arn = ''.join(['arn:aws:iam::', failed_resource_account_id, ':role/'])
                 # This allows users to set their own role name if they have a different naming convention
                 role_arn = ''.join([role_arn, cross_account_role_name]) if cross_account_role_name else ''.join([role_arn, 'RadwareCWPAutomatedResponse'])
@@ -145,22 +144,26 @@ def process_message(source_message):
                     aws_session_token=credentials_for_event['SessionToken']
                 )
 
-                if source_message['objectType'] == 'AlertEntity':
-                    alert = source_message
-                    # print("alert=" + str(alert))
-                    responses.handle_alert(boto_session, alert)
-                elif source_message['objectType'] == 'WarningEntity':
-                    hardening = source_message
-                    # print("hardening=" + str(hardening))
-                    responses.handle_hardening(boto_session, hardening)
+                trigger_response(boto_session, source_message)
 
+            else:
+                # In single account mode, we don't want to try to execute a Response outside of this account therefore
+                # the lambda will exit with error
+                print(
+                    f'This finding was found in account id {failed_resource_account_id}. The Lambda function is running in account id: {lambda_account_id}. Remediations need to be ran from the account there is the issue in.')
         else:
-            # In single account mode, we don't want to try to execute a Response outside of this account therefore
-            # the lambda will exit with error
-            print(
-                f'This finding was found in account id {failed_resource_account_id}. The Lambda function is running in account id: {lambda_account_id}. Remediations need to be ran from the account there is the issue in.')
+            trigger_response(boto3, source_message)
 
 
+def trigger_response(boto_session, source_message):
+    if source_message['objectType'] == 'AlertEntity':
+        alert = source_message
+        print("alert=" + str(alert))
+        responses.handle_alert(boto_session, alert)
+    elif source_message['objectType'] == 'WarningEntity':
+        hardening = source_message
+        print("hardening=" + str(hardening))
+        responses.handle_hardening(boto_session, hardening)
 
 
 
